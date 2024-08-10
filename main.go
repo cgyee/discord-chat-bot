@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,40 +24,66 @@ var sessionId string
 var seq int
 var encoder *form.Encoder
 
-func chatRequest(host string, token string) {
-	client := &http.Client{}
-	u := url.URL{Scheme: "https", Host: host, Path: "/v1/chat/completions"}
-	fmt.Println(u.String())
+func chatRequest(host string, token string, msg string) (string, error) {
+	if msg != "" {
+		client := &http.Client{}
+		u := url.URL{Scheme: "https", Host: host, Path: "/v1/chat/completions"}
+		chatOptions := []string{
+			"Respond with bardic insults",
+			"Respond like a court jester",
+			"Respond with sardonic wit",
+			"Respond like a mystic",
+		}
+		i := rand.Intn(len(chatOptions) - 1)
+		fmt.Println("Chat option", i)
+		option := chatOptions[i]
+		payload := map[string]interface{}{
+			"model": "gpt-4o-mini",
+			"messages": []map[string]interface{}{
+				{"role": "system",
+					"content": option},
+				{"role": "user",
+					"content": msg},
+			},
+		}
+		pBytes, _ := json.Marshal(payload)
+		req, err := http.NewRequest(http.MethodPost, u.String(), bytes.NewReader(pBytes))
+		fmt.Println(string(pBytes))
 
-	payload := map[string]interface{}{
-		"model": "gpt-4o-mini",
-		"messages": []map[string]interface{}{
-			{"role": "system",
-				"content": "You are a helpful assistant."},
-			{"role": "user",
-				"content": "Hello!"},
-		},
-	}
-	pBytes, _ := json.Marshal(payload)
-	req, err := http.NewRequest(http.MethodPost, u.String(), bytes.NewReader(pBytes))
-	fmt.Println(string(pBytes))
+		if err != nil {
+			fmt.Println("Request failed", err)
+			return "", err
+		}
 
-	if err != nil {
-		fmt.Println("Request failed", err)
+		req.Header = http.Header{}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		fmt.Println(req.Header)
+		res, err := client.Do(req)
+
+		if err != nil {
+			fmt.Println("Do req failed", err)
+			return "", err
+		}
+		defer res.Body.Close()
+
+		bBytes, _ := io.ReadAll(res.Body)
+		jsonBody := map[string]interface{}{}
+		_ = json.Unmarshal(bBytes, &jsonBody)
+		fmt.Println(res.Status)
+		fmt.Println(res.StatusCode)
+		fmt.Println(jsonBody)
+
+		choices := jsonBody["choices"].([]interface{})
+		fmt.Println("Response option", 0)
+		choice := choices[0].(map[string]interface{})
+		msg := choice["message"].(map[string]interface{})
+		content := msg["content"].(string)
+		fmt.Println(content)
+		return content, nil
+
 	}
-	req.Header = http.Header{}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-	fmt.Println(req.Header)
-	res, err := client.Do(req)
-	if err != nil {
-		fmt.Println("Do req failed", err)
-	}
-	body, _ := ioutil.ReadAll(res.Body)
-	defer res.Body.Close()
-	fmt.Println(res.Status)
-	fmt.Println(res.StatusCode)
-	fmt.Println(string(body))
+	return "", nil
 
 }
 
@@ -115,7 +142,7 @@ func main() {
 
 	openaiKey := os.Getenv("OPENAI_API_KEY")
 	openaiApi := os.Getenv("OPENAI_API")
-	chatRequest(openaiApi, openaiKey)
+	chatRequest(openaiApi, openaiKey, "I love kayla")
 	// tkn := os.Getenv("TOKEN")
 	// u := url.URL{Scheme: "wss", Host: "gateway.discord.gg", Path: "/"}
 	// fmt.Println(u.String())
