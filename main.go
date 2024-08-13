@@ -1,91 +1,39 @@
 package main
 
 import (
-	"bytes"
+	"discord-chat-bot/main/pkg/chatrequest"
+	"discord-chat-bot/main/pkg/discordmessage"
 	"encoding/json"
 	"fmt"
-	"io"
-	"math/rand"
-	"net/http"
 	"net/url"
 	"os"
 	"time"
 
-	"github.com/go-playground/form/v4"
 	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
 )
 
+type DiscordData struct {
+	message       string
+	channel       string
+	guild         string
+	hasMessageRef bool
+	messageRef    string
+}
+
+type Bot struct {
+	name string
+}
+
 var ready bool = false
 var ch = make(chan int, 5)
-var msg = make(chan string, 5)
+var msg = make(chan DiscordData, 5)
 var resumeGatewayUrl string
 var sessionId string
 var seq int
-var encoder *form.Encoder
-
-func chatRequest(host string, token string, msg string) (string, error) {
-	if msg != "" {
-		client := &http.Client{}
-		u := url.URL{Scheme: "https", Host: host, Path: "/v1/chat/completions"}
-		chatOptions := []string{
-			"Respond with bardic insults",
-			"Respond like a court jester",
-			"Respond with sardonic wit",
-			"Respond like a mystic",
-		}
-		i := rand.Intn(len(chatOptions) - 1)
-		fmt.Println("Chat option", i)
-		option := chatOptions[i]
-		payload := map[string]interface{}{
-			"model": "gpt-4o-mini",
-			"messages": []map[string]interface{}{
-				{"role": "system",
-					"content": option},
-				{"role": "user",
-					"content": msg},
-			},
-		}
-		pBytes, _ := json.Marshal(payload)
-		req, err := http.NewRequest(http.MethodPost, u.String(), bytes.NewReader(pBytes))
-		fmt.Println(string(pBytes))
-
-		if err != nil {
-			fmt.Println("Request failed", err)
-			return "", err
-		}
-
-		req.Header = http.Header{}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+token)
-		fmt.Println(req.Header)
-		res, err := client.Do(req)
-
-		if err != nil {
-			fmt.Println("Do req failed", err)
-			return "", err
-		}
-		defer res.Body.Close()
-
-		bBytes, _ := io.ReadAll(res.Body)
-		jsonBody := map[string]interface{}{}
-		_ = json.Unmarshal(bBytes, &jsonBody)
-		fmt.Println(res.Status)
-		fmt.Println(res.StatusCode)
-		fmt.Println(jsonBody)
-
-		choices := jsonBody["choices"].([]interface{})
-		fmt.Println("Response option", 0)
-		choice := choices[0].(map[string]interface{})
-		msg := choice["message"].(map[string]interface{})
-		content := msg["content"].(string)
-		fmt.Println(content)
-		return content, nil
-
-	}
-	return "", nil
-
-}
+var appId string
+var openaiKey string
+var discrodApiKey string
 
 func heartbeat(heartbeat_interval int) {
 	ticker := time.NewTicker(time.Millisecond * time.Duration(heartbeat_interval))
@@ -96,9 +44,23 @@ func heartbeat(heartbeat_interval int) {
 	}
 }
 func responseWriter(ws *websocket.Conn, token string) {
+	// bot := Bot{
+	// 	name: "Chat-Bot-Test-APP",
+	// }
 	for {
 		opCode := <-ch
 		switch opCode {
+		case 0:
+			m := <-msg
+			message, channel := m.message, m.channel
+			go func() {
+				response, err := chatrequest.Request(openaiKey, message)
+				if err != nil {
+					fmt.Println("chatRequest err", err)
+
+				}
+				discordmessage.Request(discrodApiKey, response, channel, "")
+			}()
 		case 1:
 			ws.WriteJSON(map[string]interface{}{
 				"op": 1, "d": nil,
@@ -131,6 +93,7 @@ func responseWriter(ws *websocket.Conn, token string) {
 				},
 			})
 		}
+
 	}
 
 }
@@ -139,79 +102,99 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		fmt.Println("Load", err)
 	}
+	openaiKey = os.Getenv("OPENAI_API_KEY")
+	discrodApiKey = os.Getenv("DISCORD_API_KEY")
+	appId := os.Getenv("APP_ID")
+	bot := discordmessage.RequestBotInfo(discrodApiKey, appId)
+	fmt.Println(discrodApiKey)
+	u := url.URL{Scheme: "wss", Host: "gateway.discord.gg", Path: "/"}
+	fmt.Println(u.String())
+	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer conn.Close()
+	if err != nil {
+		fmt.Println("Socket", err)
+	}
+	go responseWriter(conn, discrodApiKey)
+	for {
+		_, content, err := conn.ReadMessage()
+		if err != nil {
+			fmt.Println("Read fail ", err)
+			return
+		}
 
-	openaiKey := os.Getenv("OPENAI_API_KEY")
-	openaiApi := os.Getenv("OPENAI_API")
-	chatRequest(openaiApi, openaiKey, "I love kayla")
-	// tkn := os.Getenv("TOKEN")
-	// u := url.URL{Scheme: "wss", Host: "gateway.discord.gg", Path: "/"}
-	// fmt.Println(u.String())
-	// conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// }
-	// defer conn.Close()
-	// if err != nil {
-	// 	fmt.Println("Socket", err)
-	// }
-	// go responseWriter(conn, tkn)
-	// for {
-	// 	_, content, err := conn.ReadMessage()
-	// 	if err != nil {
-	// 		fmt.Println("Read fail ", err)
-	// 		return
-	// 	}
+		data := map[string]interface{}{}
+		_ = json.Unmarshal(content, &data)
+		var opCode float64
+		if data["op"] != nil {
+			opCode = data["op"].(float64)
+		}
+		seq = int(opCode)
+		fmt.Println("Dispacth code:", opCode)
+		switch opCode {
+		case 10:
+			if !ready {
+				d := data["d"].(map[string]interface{})
+				heartbeat_interval := int(d["heartbeat_interval"].(float64))
+				ch <- 10
+				go heartbeat(heartbeat_interval)
+			}
+			ready = true
+		case 6:
+			ch <- 6
+			u := url.URL{Scheme: "wss", Host: resumeGatewayUrl, Path: "/"}
+			fmt.Println(u.String())
+			conn, _, err = websocket.DefaultDialer.Dial(u.String(), nil)
+			if err != nil {
+				fmt.Println(err)
+			}
+		case 7:
+			ch <- 7
 
-	// 	data := map[string]interface{}{}
-	// 	_ = json.Unmarshal(content, &data)
-	// 	var opCode float64
-	// 	if data["op"] != nil {
-	// 		opCode = data["op"].(float64)
-	// 	}
-	// 	seq = int(opCode)
-	// 	fmt.Println("Dispacth code:", opCode)
-	// 	switch opCode {
-	// 	case 10:
-	// 		if !ready {
-	// 			d := data["d"].(map[string]interface{})
-	// 			heartbeat_interval := int(d["heartbeat_interval"].(float64))
-	// 			ch <- 10
-	// 			go heartbeat(heartbeat_interval)
-	// 		}
-	// 		ready = true
-	// 	case 6:
-	// 		ch <- 6
-	// 		u := url.URL{Scheme: "wss", Host: resumeGatewayUrl, Path: "/"}
-	// 		fmt.Println(u.String())
-	// 		conn, _, err = websocket.DefaultDialer.Dial(u.String(), nil)
-	// 		if err != nil {
-	// 			fmt.Println(err)
-	// 		}
-	// 	case 7:
-	// 		ch <- 7
+		}
+		status := data["t"]
+		switch status {
 
-	// 	}
-	// 	status := data["t"]
-	// 	switch status {
+		case "READY":
+			fmt.Println("READY")
+			d := data["d"].(map[string]interface{})
+			sessionId = d["session_id"].(string)
+			resumeGatewayUrl = d["resume_gateway_url"].(string)
 
-	// 	case "READY":
-	// 		fmt.Println("READY")
-	// 		d := data["d"].(map[string]interface{})
-	// 		sessionId = d["session_id"].(string)
-	// 		resumeGatewayUrl = d["resume_gateway_url"].(string)
+		case "MESSAGE_CREATE":
+			d := data["d"].(map[string]interface{})
+			bytes, _ := json.Marshal(d)
+			fmt.Println(string(bytes))
+			author := d["author"].(map[string]interface{})
+			username := author["username"].(string)
+			if bot != username {
+				content := d["content"].(string)
+				guild := d["guild_id"].(string)
+				channel := d["channel_id"].(string)
+				messageRef := d["id"].(string)
+				hasMessageRef := false
+				if messageRef != "" {
+					hasMessageRef = true
+				}
+				fmt.Println(username, "said", content)
+				fmt.Println(d)
+				ch <- 0
+				message := DiscordData{
+					message:       content,
+					channel:       channel,
+					guild:         guild,
+					hasMessageRef: hasMessageRef,
+					messageRef:    messageRef,
+				}
+				msg <- message
+			}
+		default:
+			if status != nil {
+				fmt.Println("Status:", status)
+			}
+		}
 
-	// 	case "MESSAGE_CREATE":
-	// 		d := data["d"].(map[string]interface{})
-	// 		content := d["content"].(string)
-	// 		author := d["author"].(map[string]interface{})
-	// 		username := author["username"].(string)
-	// 		fmt.Println(username, "said", content)
-	// 		fmt.Println(d)
-	// 	default:
-	// 		if status != nil {
-	// 			fmt.Println("Status:", status)
-	// 		}
-	// 	}
-
-	// }
+	}
 }
