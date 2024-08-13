@@ -25,7 +25,6 @@ func Request(token string, message string, channel string, messageRef string) {
 		if err != nil {
 			fmt.Println(err)
 		}
-		fmt.Println(data)
 
 		req.Header = http.Header{}
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -37,8 +36,6 @@ func Request(token string, message string, channel string, messageRef string) {
 			fmt.Println(err)
 		}
 		defer res.Body.Close()
-		fmt.Println(res.Status)
-		fmt.Println(res.StatusCode)
 
 		bBytes, _ := io.ReadAll(res.Body)
 		jsonBody := map[string]interface{}{}
@@ -51,12 +48,11 @@ func Request(token string, message string, channel string, messageRef string) {
 }
 
 type Bot struct {
-	name string `json:name,omitempty`
+	Name string `json:name,omitempty`
 }
 
 func RequestBotInfo(token string, appId string) string {
 	client := &http.Client{}
-
 	u := url.URL{
 		Scheme:  "https",
 		Host:    "discord.com",
@@ -68,21 +64,21 @@ func RequestBotInfo(token string, appId string) string {
 	if err != nil {
 		fmt.Println(err)
 	}
+
 	req.Header = http.Header{}
 	req.Header.Set("Authorization", "Bot "+token)
-
 	res, err := client.Do(req)
 	if err != nil {
 		fmt.Println(err)
 	}
 	defer res.Body.Close()
-	fmt.Println(res.Status)
-	fmt.Println(res.StatusCode)
 
+	fmt.Println(res.Status)
 	bBytes, _ := io.ReadAll(res.Body)
 	botInfo := map[string]interface{}{}
 	fmt.Println(string(bBytes))
 	json.Unmarshal(bBytes, &botInfo)
+
 	return botInfo["name"].(string)
 
 }

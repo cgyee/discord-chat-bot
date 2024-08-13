@@ -44,9 +44,6 @@ func heartbeat(heartbeat_interval int) {
 	}
 }
 func responseWriter(ws *websocket.Conn, token string) {
-	// bot := Bot{
-	// 	name: "Chat-Bot-Test-APP",
-	// }
 	for {
 		opCode := <-ch
 		switch opCode {
@@ -133,6 +130,7 @@ func main() {
 		}
 		seq = int(opCode)
 		fmt.Println("Dispacth code:", opCode)
+
 		switch opCode {
 		case 10:
 			if !ready {
@@ -152,7 +150,6 @@ func main() {
 			}
 		case 7:
 			ch <- 7
-
 		}
 		status := data["t"]
 		switch status {
@@ -174,19 +171,13 @@ func main() {
 				guild := d["guild_id"].(string)
 				channel := d["channel_id"].(string)
 				messageRef := d["id"].(string)
-				hasMessageRef := false
-				if messageRef != "" {
-					hasMessageRef = true
-				}
 				fmt.Println(username, "said", content)
-				fmt.Println(d)
 				ch <- 0
 				message := DiscordData{
-					message:       content,
-					channel:       channel,
-					guild:         guild,
-					hasMessageRef: hasMessageRef,
-					messageRef:    messageRef,
+					message:    content,
+					channel:    channel,
+					guild:      guild,
+					messageRef: messageRef,
 				}
 				msg <- message
 			}

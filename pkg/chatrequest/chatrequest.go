@@ -16,15 +16,17 @@ func Request(token string, msg string) (string, error) {
 		u := url.URL{Scheme: "https", Host: "api.openai.com", Path: "/v1/chat/completions"}
 		chatOptions := []string{
 			"Respond with bardic insults",
-			"Respond like a court jester",
 			"Respond with sardonic wit",
 			"Respond like a mystic",
+			"Respond like a teenager",
 		}
 		i := rand.Intn(len(chatOptions) - 1)
 		fmt.Println("Chat option", i)
 		option := chatOptions[i]
+
 		payload := map[string]interface{}{
-			"model": "gpt-4o-mini",
+			"model":      "gpt-4o-mini",
+			"max_tokens": 50,
 			"messages": []map[string]interface{}{
 				{"role": "system",
 					"content": option},
@@ -33,9 +35,8 @@ func Request(token string, msg string) (string, error) {
 			},
 		}
 		pBytes, _ := json.Marshal(payload)
-		req, err := http.NewRequest(http.MethodPost, u.String(), bytes.NewReader(pBytes))
-		fmt.Println(string(pBytes))
 
+		req, err := http.NewRequest(http.MethodPost, u.String(), bytes.NewReader(pBytes))
 		if err != nil {
 			fmt.Println("Request failed", err)
 			return "", err
@@ -58,7 +59,6 @@ func Request(token string, msg string) (string, error) {
 		if err = json.Unmarshal(bBytes, &jsonBody); err != nil {
 			return "", nil
 		}
-		fmt.Println(jsonBody)
 
 		choices := jsonBody["choices"].([]interface{})
 		fmt.Println("Response option", 0)
@@ -66,6 +66,7 @@ func Request(token string, msg string) (string, error) {
 		msg := choice["message"].(map[string]interface{})
 		content := msg["content"].(string)
 		fmt.Println(content)
+
 		return content, nil
 
 	}
