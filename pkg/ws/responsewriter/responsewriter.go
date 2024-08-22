@@ -60,7 +60,6 @@ func Write(ws *websocket.Conn, discordKey string, openaiKey string, ch chan int,
 				},
 			})
 		}
-
 	}
 
 }

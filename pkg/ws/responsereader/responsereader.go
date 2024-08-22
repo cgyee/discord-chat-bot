@@ -10,13 +10,18 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/joho/godotenv"
 )
 
 func Read(ws *websocket.Conn, discordKey string, ch chan int, msg chan structs.Data) {
+	if err := godotenv.Load(); err != nil {
+		fmt.Println("Load", err)
+	}
 	var sessionId string
 	// var seq int
 	var resumeGatewayUrl string
 	ready := false
+	fmt.Println("Read")
 	appId := os.Getenv("APP_ID")
 
 	bot := discordmessage.RequestBotInfo(discordKey, appId)
@@ -92,8 +97,8 @@ func Read(ws *websocket.Conn, discordKey string, ch chan int, msg chan structs.D
 				fmt.Println("Status:", status)
 			}
 		}
-
 	}
+
 }
 
 func heartbeat(heartbeat_interval int, ch chan<- int) {
