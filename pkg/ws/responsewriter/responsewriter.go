@@ -2,14 +2,14 @@ package responsewriter
 
 import (
 	"discord-chat-bot/main/pkg/chatrequest"
-	"discord-chat-bot/main/pkg/discordmessage"
+	"discord-chat-bot/main/pkg/discord"
 	"discord-chat-bot/main/pkg/structs"
 	"fmt"
 
 	"github.com/gorilla/websocket"
 )
 
-func Write(ws *websocket.Conn, discordKey string, openaiKey string, ch chan int, msg <-chan structs.Data) {
+func Write(ws *websocket.Conn, discordKey string, openaiKey string, ch chan int, msg <-chan structs.Data, invalid chan<- error) {
 	var sessionId string
 	var seq int
 	for {
@@ -23,9 +23,10 @@ func Write(ws *websocket.Conn, discordKey string, openaiKey string, ch chan int,
 				response, err := chatrequest.Request(openaiKey, message)
 				if err != nil {
 					fmt.Println("chatRequest err", err)
+					invalid <- err
 
 				}
-				discordmessage.Request(discordKey, response, channel, "")
+				discord.SendMessage(discordKey, response, channel, "")
 			}()
 		case 1:
 			ws.WriteJSON(map[string]interface{}{

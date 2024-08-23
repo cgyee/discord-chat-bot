@@ -1,4 +1,4 @@
-package discordmessage
+package discord
 
 import (
 	"encoding/json"
@@ -9,7 +9,40 @@ import (
 	"strings"
 )
 
-func Request(token string, message string, channel string, messageRef string) {
+func GetGateway(discordKey string) string {
+	client := &http.Client{}
+	u := url.URL{Scheme: "http", Host: "discord.com", Path: "/api/v10/gateway/bot", RawPath: "/api/v10/gateway/bot"}
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		fmt.Println("gate get error", err)
+	}
+
+	req.Header.Set("Authorization", "Bot "+discordKey)
+	req.Header.Set("Accept", "application/json")
+
+	res, err := client.Do(req)
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer res.Body.Close()
+	fmt.Println(res.Status)
+	bBytes, _ := io.ReadAll(res.Body)
+	jsonBody := map[string]interface{}{}
+	if err = json.Unmarshal(bBytes, &jsonBody); err != nil {
+		fmt.Println(err)
+	}
+
+	gatewayUrl := jsonBody["url"]
+	if gatewayUrl == nil {
+		return ""
+	}
+	fmt.Println(gatewayUrl)
+	return gatewayUrl.(string)
+
+}
+
+func SendMessage(token string, message string, channel string, messageRef string) {
 	if message != "" || channel != "" {
 		client := &http.Client{}
 		u := url.URL{

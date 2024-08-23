@@ -9,7 +9,3 @@ type Data struct {
 	SessionId     string
 	Seq           int
 }
-
-func DiscordData() Data {
-	return Data{}
-}

@@ -1,11 +1,10 @@
 package responsereader
 
 import (
-	"discord-chat-bot/main/pkg/discordmessage"
+	"discord-chat-bot/main/pkg/discord"
 	"discord-chat-bot/main/pkg/structs"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"time"
 
@@ -13,9 +12,10 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func Read(ws *websocket.Conn, discordKey string, ch chan int, msg chan structs.Data) {
+func Read(ws *websocket.Conn, discordKey string, ch chan int, msg chan structs.Data, invalid chan<- error) {
 	if err := godotenv.Load(); err != nil {
 		fmt.Println("Load", err)
+		invalid <- err
 	}
 	var sessionId string
 	// var seq int
@@ -24,11 +24,12 @@ func Read(ws *websocket.Conn, discordKey string, ch chan int, msg chan structs.D
 	fmt.Println("Read")
 	appId := os.Getenv("APP_ID")
 
-	bot := discordmessage.RequestBotInfo(discordKey, appId)
+	bot := discord.RequestBotInfo(discordKey, appId)
 	for {
 		_, content, err := ws.ReadMessage()
 		if err != nil {
 			fmt.Println("Read fail ", err)
+			invalid <- err
 			return
 		}
 
@@ -52,11 +53,12 @@ func Read(ws *websocket.Conn, discordKey string, ch chan int, msg chan structs.D
 			ready = true
 		case 6:
 			ch <- 6
-			u := url.URL{Scheme: "wss", Host: resumeGatewayUrl, Path: "/"}
-			fmt.Println(u.String())
-			ws, _, err = websocket.DefaultDialer.Dial(u.String(), nil)
+			fmt.Println(resumeGatewayUrl)
+			ws, _, err = websocket.DefaultDialer.Dial(resumeGatewayUrl, nil)
 			if err != nil {
 				fmt.Println(err)
+				invalid <- err
+				return
 			}
 		case 7:
 			ch <- 7
